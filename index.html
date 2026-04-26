@@ -203,26 +203,48 @@
   <div id="auth-screen" class="screen">
     <div class="card auth-box">
       <h2 style="margin-bottom: 8px;">Вход в систему</h2>
-      <p style="color: var(--text-muted); margin-bottom: 24px; font-size: 0.9375rem;">Введите инвайт-код для авторизации или подачи заявки</p>
+      <div id="auth-tabs" style="display: flex; gap: 8px; margin-bottom: 16px; justify-content: center;">
+        <button class="btn btn-sm active" style="flex:1;" onclick="switchAuthTab('login')" id="tab-login">Вход</button>
+        <button class="btn btn-sm btn-outline" style="flex:1;" onclick="switchAuthTab('register')" id="tab-register">Регистрация</button>
+      </div>
       
-      <form id="auth-form" onsubmit="handleLogin(event)">
-        <div class="input-group">
-          <label>Инвайт код</label>
-          <input type="text" id="auth-code" required placeholder="Например: A7fK29xZ">
-        </div>
-        
-        <div class="input-group" id="auth-name-group">
-          <label>Ваше Имя (для новых)</label>
-          <input type="text" id="auth-name" placeholder="John Doe">
-        </div>
-        
-        <div class="input-group" id="auth-phone-group">
-          <label>Телефон (для новых)</label>
-          <input type="tel" id="auth-phone" placeholder="+998 90 123 45 67">
-        </div>
-        
-        <button type="submit" class="btn" style="width: 100%; margin-top: 8px;">Продолжить</button>
-      </form>
+      <!-- Login Form -->
+      <div id="login-form-container">
+        <form id="login-form" onsubmit="window.handleLogin(event)">
+          <div class="input-group">
+            <label>Email</label>
+            <input type="email" id="auth-login-email" required placeholder="user@example.com">
+          </div>
+          <div class="input-group">
+            <label>Пароль</label>
+            <input type="password" id="auth-login-password" required placeholder="******">
+          </div>
+          <button type="submit" class="btn" style="width: 100%;">Войти</button>
+        </form>
+      </div>
+
+      <!-- Register Form -->
+      <div id="register-form-container" style="display: none;">
+        <form id="register-form" onsubmit="window.handleRegister(event)">
+          <div class="input-group">
+            <label>Инвайт код</label>
+            <input type="text" id="auth-reg-invite" required placeholder="A7fK29xZ">
+          </div>
+          <div class="input-group">
+            <label>Ваше Имя</label>
+            <input type="text" id="auth-reg-name" required placeholder="John Doe">
+          </div>
+          <div class="input-group">
+            <label>Email</label>
+            <input type="email" id="auth-reg-email" required placeholder="user@example.com">
+          </div>
+          <div class="input-group">
+            <label>Пароль</label>
+            <input type="password" id="auth-reg-password" required placeholder="******">
+          </div>
+          <button type="submit" class="btn btn-success" style="width: 100%;">Зарегистрироваться</button>
+        </form>
+      </div>
     </div>
   </div>
 
@@ -322,7 +344,110 @@
   </div>
 
   <!-- ================= JAVASCRIPT ================= -->
-  <script>
+  <script type="module">
+    import { db, auth, signInWithEmailAndPassword, createUserWithEmailAndPassword, onAuthStateChanged, signOut, collection, doc, setDoc, getDoc, updateDoc, deleteDoc, onSnapshot, writeBatch } from './src/firebase.js';
+
+    // Firebase Auth session management
+    onAuthStateChanged(auth, async (user) => {
+      if (user) {
+        state.currentUser = { uid: user.uid, email: user.email };
+        await setupRealtimeSync();
+      } else {
+        state.currentUser = null;
+        if (typeof initApp === 'function') initApp();
+      }
+    });
+
+    let unsubscribes = [];
+    async function setupRealtimeSync() {
+      unsubscribes.forEach(u => u());
+      unsubscribes = [];
+
+      if (state.currentUser && state.currentUser.role === 'admin' && !state.currentUser.uid) {
+        // Admin bypass mode
+        unsubscribes.push(onSnapshot(collection(db, 'invites'), snap => {
+          state.inviteCodes = snap.docs.map(d => ({ code: d.id, ...d.data() }));
+          state.inviteCodes.sort((a,b) => b.createdAt - a.createdAt);
+          const paneCodes = document.getElementById('pane-codes');
+          if (paneCodes && paneCodes.style.display === 'block') renderCodes();
+        }));
+        unsubscribes.push(onSnapshot(collection(db, 'users'), snap => {
+          const allUsers = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+          state.requests = allUsers.filter(u => u.status === 'pending');
+          state.users = allUsers.filter(u => u.status === 'active');
+          state.requests.sort((a,b) => b.createdAt - a.createdAt);
+          state.users.sort((a,b) => b.createdAt - a.createdAt);
+          const paneReqs = document.getElementById('pane-requests');
+          const paneUsers = document.getElementById('pane-users');
+          if (paneReqs && paneReqs.style.display === 'block') renderRequests();
+          if (paneUsers && paneUsers.style.display === 'block') renderUsers();
+        }));
+        initApp();
+        return;
+      }
+
+      if (!state.currentUser?.uid) return;
+
+      const userRef = doc(db, 'users', state.currentUser.uid);
+      
+      unsubscribes.push(onSnapshot(userRef, docSnap => {
+        if (!docSnap.exists()) {
+          state.currentUser = null;
+          signOut(auth).then(() => {
+            if (typeof initApp === 'function') initApp();
+          });
+          return;
+        }
+        
+        const userData = docSnap.data();
+        if (userData.status === 'blocked') {
+          alert("Ваш аккаунт заблокирован.");
+          logout();
+          return;
+        }
+
+        state.currentUser = { ...state.currentUser, ...userData };
+        
+        if (state.currentUser.role === 'admin') {
+          unsubscribes.push(onSnapshot(collection(db, 'invites'), snap => {
+            state.inviteCodes = snap.docs.map(d => ({ code: d.id, ...d.data() }));
+            state.inviteCodes.sort((a,b) => b.createdAt - a.createdAt);
+            const paneCodes = document.getElementById('pane-codes');
+            if (paneCodes && paneCodes.style.display === 'block') renderCodes();
+          }));
+
+          unsubscribes.push(onSnapshot(collection(db, 'users'), snap => {
+            const allUsers = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+            state.requests = allUsers.filter(u => u.status === 'pending');
+            state.users = allUsers.filter(u => u.status === 'active');
+            state.requests.sort((a,b) => b.createdAt - a.createdAt);
+            state.users.sort((a,b) => b.createdAt - a.createdAt);
+            const paneReqs = document.getElementById('pane-requests');
+            const paneUsers = document.getElementById('pane-users');
+            if (paneReqs && paneReqs.style.display === 'block') renderRequests();
+            if (paneUsers && paneUsers.style.display === 'block') renderUsers();
+          }));
+        } else if (state.currentUser.role === 'client' && state.currentUser.status === 'active') {
+          unsubscribes.push(onSnapshot(collection(db, 'orders'), snap => {
+            const allOrders = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+            allOrders.forEach(o => {
+              try { o.items = JSON.parse(o.itemsJson || '[]'); } catch(e) { o.items = []; }
+            });
+            state.orders_active = allOrders.filter(o => o.status === 'active' && o.userId === state.currentUser.uid);
+            state.orders_archive = allOrders.filter(o => o.status === 'archived' && o.userId === state.currentUser.uid);
+            state.orders_active.sort((a,b) => b.createdAt - a.createdAt);
+            state.orders_archive.sort((a,b) => b.createdAt - a.createdAt);
+            const paneActive = document.getElementById('c-pane-active');
+            const paneArchive = document.getElementById('c-pane-archive');
+            if (paneActive && paneActive.style.display === 'block') renderClientOrders('active');
+            if (paneArchive && paneArchive.style.display === 'block') renderClientOrders('archive');
+          }));
+        }
+        
+        initApp(); // Refresh UI once state changes
+      }));
+    }
+
     /**
      * 1. STATE & CONSTANTS
      */
@@ -348,172 +473,193 @@
      * 2. LOCAL STORAGE UTILS
      */
     function loadState() {
-      const saved = localStorage.getItem('appState_v1');
+      const saved = localStorage.getItem('appState_v2');
       if (saved) {
-        state = { ...state, ...JSON.parse(saved) };
+        const parsed = JSON.parse(saved);
+        state.cart = parsed.cart || [];
       }
-      if (!state.orders_active) state.orders_active = [];
-      if (!state.orders_archive) state.orders_archive = [];
-      if (!state.users) state.users = [];
-      
-      // Migrate old format if needed
-      if (state.orders) {
-        state.orders_active.push(...state.orders.filter(o => o.status !== 'archived'));
-        state.orders_archive.push(...state.orders.filter(o => o.status === 'archived'));
-        delete state.orders;
-        saveState();
-      }
-
-      // Add missing IDs to legacy data
-      let stateModified = false;
-      state.orders_active.forEach((o, i) => { if (o.id === undefined) { o.id = Date.now() + i; stateModified = true; } });
-      state.orders_archive.forEach((o, i) => { if (o.id === undefined) { o.id = Date.now() + i + 10000; stateModified = true; } });
-      state.users.forEach((u, i) => { if (u.inviteCode === undefined) { u.inviteCode = 'LEGACY_' + (Date.now() + i); stateModified = true; } });
-      state.requests.forEach((r, i) => { if (r.id === undefined) { r.id = Date.now() + i + 20000; stateModified = true; } });
-      
-      if (stateModified) saveState();
     }
 
     function saveState() {
-      localStorage.setItem('appState_v1', JSON.stringify(state));
+      localStorage.setItem('appState_v2', JSON.stringify({ cart: state.cart }));
     }
 
     /**
      * 3. INIT & ROUTING
      */
-    function initApp() {
+    window.initApp = function() {
       loadState();
 
-      document.getElementById('auth-screen').classList.remove('active');
-      document.getElementById('admin-screen').classList.remove('active');
-      document.getElementById('client-screen').classList.remove('active');
+      if (document.getElementById('auth-screen')) document.getElementById('auth-screen').classList.remove('active');
+      if (document.getElementById('admin-screen')) document.getElementById('admin-screen').classList.remove('active');
+      if (document.getElementById('client-screen')) document.getElementById('client-screen').classList.remove('active');
 
       if (!state.currentUser) {
-        document.getElementById('auth-screen').classList.add('active');
+        if (document.getElementById('auth-screen')) document.getElementById('auth-screen').classList.add('active');
+        if (typeof window.switchAuthTab === 'function') window.switchAuthTab('login');
       } else if (state.currentUser.role === 'admin') {
-        document.getElementById('admin-screen').classList.add('active');
-        switchAdminTab('codes');
+        if (document.getElementById('admin-screen')) document.getElementById('admin-screen').classList.add('active');
+        window.switchAdminTab('codes');
+      } else if (state.currentUser.status === 'pending') {
+         if (document.getElementById('auth-screen')) document.getElementById('auth-screen').classList.add('active');
+         const tabs = document.getElementById('auth-tabs');
+         if(tabs) tabs.style.display = 'none';
+         const lform = document.getElementById('login-form-container');
+         if(lform) lform.innerHTML = '<p style="text-align: center; color: var(--text-muted); margin-bottom: 20px;">Ваша заявка находится на рассмотрении.</p><button onclick="window.logout()" class="btn btn-outline" style="width: 100%;">Выйти</button>';
+         if(lform) lform.style.display = 'block';
+         const rform = document.getElementById('register-form-container');
+         if(rform) rform.style.display = 'none';
       } else if (state.currentUser.role === 'client') {
-        document.getElementById('client-screen').classList.add('active');
-        document.getElementById('client-name').innerText = state.currentUser.name;
+        if (document.getElementById('client-screen')) document.getElementById('client-screen').classList.add('active');
+        if (document.getElementById('client-name')) document.getElementById('client-name').innerText = state.currentUser.name;
         switchClientTab('shop');
         renderClientShop();
         renderCart();
       }
-    }
+    };
+    const initApp = window.initApp;
 
     function switchClientTab(tabId) {
       ['shop', 'active', 'archive'].forEach(id => {
-        document.getElementById(`c-btn-${id}`).classList.remove('active');
-        document.getElementById(`c-pane-${id}`).style.display = 'none';
+        const btn = document.getElementById(`c-btn-${id}`);
+        const pane = document.getElementById(`c-pane-${id}`);
+        if(btn) btn.classList.remove('active');
+        if(pane) pane.style.display = 'none';
       });
-      document.getElementById(`c-btn-${tabId}`).classList.add('active');
-      document.getElementById(`c-pane-${tabId}`).style.display = 'block';
+      const tbtn = document.getElementById(`c-btn-${tabId}`);
+      if(tbtn) tbtn.classList.add('active');
+      const tpane = document.getElementById(`c-pane-${tabId}`);
+      if(tpane) tpane.style.display = 'block';
 
       if (tabId === 'active') renderClientOrders('active');
       if (tabId === 'archive') renderClientOrders('archive');
     }
 
-    function logout() {
+    async function logout() {
       state.currentUser = null;
       saveState();
+      try {
+        await signOut(auth);
+      } catch(e) {}
       initApp();
     }
 
     /**
-     * UI Hint for Admin code
-     */
-    document.getElementById('auth-code').addEventListener('input', (e) => {
-      const isAd = e.target.value.trim() === ADMIN_CODE;
-      document.getElementById('auth-name-group').style.opacity = isAd ? "0.3" : "1";
-      document.getElementById('auth-phone-group').style.opacity = isAd ? "0.3" : "1";
-    });
-
-    /**
      * 4. AUTH & REQUEST LOGIC
      */
-    function handleLogin(e) {
-      e.preventDefault();
+    window.switchAuthTab = function(tab) {
+      if(document.getElementById('auth-tabs')) {
+         document.getElementById('auth-tabs').style.display = 'flex';
+      }
+      document.getElementById('tab-login').classList.remove('active', 'btn-primary');
+      document.getElementById('tab-login').classList.add('btn-outline');
+      document.getElementById('tab-register').classList.remove('active', 'btn-primary');
+      document.getElementById('tab-register').classList.add('btn-outline');
       
-      const code = document.getElementById('auth-code').value.trim();
-      const name = document.getElementById('auth-name').value.trim();
-      let phone = document.getElementById('auth-phone').value.trim();
+      if(tab === 'login') {
+        document.getElementById('login-form-container').style.display = 'block';
+        document.getElementById('register-form-container').style.display = 'none';
+        document.getElementById('tab-login').classList.add('active', 'btn-primary');
+        document.getElementById('tab-login').classList.remove('btn-outline');
+      } else {
+        document.getElementById('login-form-container').style.display = 'none';
+        document.getElementById('register-form-container').style.display = 'block';
+        document.getElementById('tab-register').classList.add('active', 'btn-primary');
+        document.getElementById('tab-register').classList.remove('btn-outline');
+      }
+    };
 
-      if (!code) return alert("Введите инвайт код");
+    window.handleLogin = async (e) => {
+      e.preventDefault();
+      const email = document.getElementById('auth-login-email').value.trim();
+      const password = document.getElementById('auth-login-password').value;
 
-      // Admin Bypass
-      if (code === ADMIN_CODE) {
+      // Admin Bypass Feature using predefined code in place of password for email
+      if (email === "admin@admin.com" && password === ADMIN_CODE) {
         state.currentUser = { role: "admin" };
         saveState();
         initApp();
         return;
       }
 
-      // Check if user already exists
-      const existingUser = state.users.find(u => u.inviteCode === code);
-      if (existingUser) {
-        state.currentUser = existingUser;
-        saveState();
-        initApp();
-        return;
-      }
-
-      // Handle new registration request
-      const invite = state.inviteCodes.find(c => c.code === code);
-      if (!invite) return alert("Этот инвайт код не существует.");
-      if (invite.used) return alert("Этот инвайт код уже использован.");
-
-      const existingReq = state.requests.find(r => r.inviteCode === code);
-      if (existingReq) return alert("Заявка с этим кодом уже находится на рассмотрении Администратором.");
-
-      if (phone) {
-        let phoneVal = phone.replace(/[^0-9+]/g, '');
-        if (!phoneVal.startsWith('+998')) {
-          const clean = phoneVal.replace(/^\+?(998)?/, '');
-          phoneVal = '+998' + clean;
+      try {
+        await signInWithEmailAndPassword(auth, email, password);
+      } catch (error) {
+        console.error(error);
+        if (error.code === 'auth/operation-not-allowed') {
+          alert("Необходимо включить Email/Password Authentication в Firebase Console.");
+        } else {
+          alert("Ошибка входа: неверный email или пароль.");
         }
-        if (!/^\+998\d{9}$/.test(phoneVal)) {
-           return alert("Неверный формат телефона! Воспользуйтесь форматом Узб: +998 XX XXX XX XX");
-        }
-        document.getElementById('auth-phone').value = phoneVal;
-        phone = phoneVal;
       }
+    };
 
-      if (!name || !phone) {
-        return alert("Для подачи заявки необходимо заполнить Имя и Телефон.");
-      }
-
-      // Create request
-      state.requests.push({
-        id: Date.now(),
-        name,
-        phone,
-        inviteCode: code,
-        status: "pending"
-      });
+    window.handleRegister = async (e) => {
+      e.preventDefault();
+      const inviteCode = document.getElementById('auth-reg-invite').value.trim();
+      const name = document.getElementById('auth-reg-name').value.trim();
+      const email = document.getElementById('auth-reg-email').value.trim();
+      const password = document.getElementById('auth-reg-password').value;
       
-      saveState();
-      document.getElementById('auth-form').reset();
-      alert("✅ Заявка отправлена успешно! Ожидайте одобрения администратором.");
-    }
+      if (!inviteCode || !name || !email || !password) return alert("Заполните все поля");
+
+      // 1. Check invite code
+      const inviteRef = doc(db, 'invites', inviteCode);
+      const inviteDoc = await getDoc(inviteRef);
+      if (!inviteDoc.exists()) return alert("Этот инвайт код не существует.");
+      if (inviteDoc.data().used) return alert("Этот инвайт код уже использован.");
+
+      try {
+        // 2. Create User
+        const userCredential = await createUserWithEmailAndPassword(auth, email, password);
+        const user = userCredential.user;
+
+        // 3. Save to Firestore
+        const batch = writeBatch(db);
+        batch.set(doc(db, 'users', user.uid), {
+          name,
+          email,
+          inviteCode,
+          role: "client",
+          status: "pending",
+          createdAt: Date.now(),
+        });
+        batch.update(inviteRef, { used: true });
+        
+        await batch.commit();
+        alert("✅ Заявка отправлена успешно! Ожидайте одобрения администратором.");
+      } catch (error) {
+        console.error(error);
+        if (error.code === 'auth/email-already-in-use') {
+          alert("Этот Email уже зарегистрирован.");
+        } else if (error.code === 'auth/weak-password') {
+          alert("Пароль слишком слабый (минимум 6 символов).");
+        } else {
+          alert(error.message);
+        }
+      }
+    };
 
     /**
      * 5. ADMIN PANEL LOGIC
      */
-    function switchAdminTab(tabId) {
+    window.switchAdminTab = function(tabId) {
       document.querySelectorAll('#admin-screen .tab-btn').forEach(b => b.classList.remove('active'));
-      document.getElementById(`tab-btn-${tabId}`).classList.add('active');
+      const activeBtn = document.getElementById(`tab-btn-${tabId}`);
+      if (activeBtn) activeBtn.classList.add('active');
 
       document.querySelectorAll('#admin-screen .tab-pane').forEach(p => p.style.display = 'none');
-      document.getElementById(`pane-${tabId}`).style.display = 'block';
+      const activePane = document.getElementById(`pane-${tabId}`);
+      if (activePane) activePane.style.display = 'block';
 
       if (tabId === 'codes') renderCodes();
       if (tabId === 'requests') renderRequests();
       if (tabId === 'users') renderUsers();
     }
+    const switchAdminTab = window.switchAdminTab;
 
     // --- CODES ---
-    function generateInviteCode() {
+    async function generateInviteCode() {
       console.log('generateInviteCode click');
       const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
       let codeStr = '';
@@ -521,13 +667,11 @@
         codeStr += chars.charAt(Math.floor(Math.random() * chars.length));
       }
       
-      state.inviteCodes.unshift({
-        code: codeStr,
+      await setDoc(doc(db, 'invites', codeStr), {
         used: false,
-        createdAt: Date.now()
+        createdAt: Date.now(),
+        createdBy: "admin"
       });
-      saveState();
-      renderCodes();
     }
 
     function renderCodes() {
@@ -552,57 +696,39 @@
     }
 
     // --- REQUESTS ---
-    function editRequestName(id) {
+    async function editRequestName(id) {
       console.log('editRequestName click for id:', id);
-      const req = state.requests.find(r => String(r.id) === String(id));
+      const req = state.requests.find(r => String(r.inviteCode) === String(id));
       if (!req) return console.warn('Request not found');
       
       const newName = prompt("Введите новое имя клиента:", req.name);
       if (newName !== null && newName.trim() !== '') {
-        req.name = newName.trim();
-        saveState();
-        renderRequests();
+        await updateDoc(doc(db, 'users', id), { name: newName.trim() });
       }
     }
 
-    function rejectRequest(id) {
+    async function rejectRequest(id) {
       console.log('rejectRequest click for id:', id);
       if(!confirm("Удалить заявку?")) return;
-      state.requests = state.requests.filter(r => String(r.id) !== String(id));
-      saveState();
-      renderRequests();
+      await deleteDoc(doc(db, 'users', id));
     }
 
-    function approveRequest(id) {
+    async function approveRequest(id) {
       console.log('approveRequest click for id:', id);
-      const reqIndex = state.requests.findIndex(r => String(r.id) === String(id));
-      if (reqIndex === -1) return console.warn('Request not found');
-      const req = state.requests[reqIndex];
+      const req = state.requests.find(r => String(r.inviteCode) === String(id));
+      if (!req) return console.warn('Request not found');
       
-      // Double check invite code
-      const codeObj = state.inviteCodes.find(c => c.code === req.inviteCode);
-      if (!codeObj || codeObj.used) {
+      const inviteRef = doc(db, 'invites', id);
+      const inviteDoc = await getDoc(inviteRef);
+      if (!inviteDoc.exists() || inviteDoc.data().used) {
         alert("Ошибка: инвайт код был удалён или уже использован другой заявкой.");
         return;
       }
 
-      // Mark code as used
-      codeObj.used = true;
-
-      // Create User
-      state.users.unshift({
-        role: "client",
-        name: req.name,
-        phone: req.phone,
-        inviteCode: req.inviteCode,
-        createdAt: Date.now()
-      });
-
-      // Remove request
-      state.requests.splice(reqIndex, 1);
-      
-      saveState();
-      renderRequests();
+      const batch = writeBatch(db);
+      batch.update(inviteRef, { used: true });
+      batch.update(doc(db, 'users', id), { status: 'active' });
+      await batch.commit();
     }
 
     function renderRequests() {
@@ -615,35 +741,27 @@
       container.innerHTML = state.requests.map(r => `
         <div class="list-item">
           <div class="item-info">
-            <div style="font-weight: 700; margin-bottom: 4px;">${r.name} <span class="badge">${r.phone}</span></div>
+            <div style="font-weight: 700; margin-bottom: 4px;">${r.name} <span class="badge">${r.email}</span></div>
             <div style="font-size: 0.875rem; color: var(--text-muted);">Код: <span style="font-family: monospace;">${r.inviteCode}</span></div>
           </div>
           <div class="item-actions">
-            <button class="btn btn-sm btn-outline edit-req-btn" data-id="${r.id}">✏️ Изменить имя</button>
-            <button class="btn btn-sm btn-success approve-req-btn" data-id="${r.id}">✔ Принять</button>
-            <button class="btn btn-sm btn-danger reject-req-btn" data-id="${r.id}">❌ Отклонить</button>
+            <button class="btn btn-sm btn-outline edit-req-btn" data-id="${r.inviteCode}">✏️ Изменить имя</button>
+            <button class="btn btn-sm btn-success approve-req-btn" data-id="${r.inviteCode}">✔ Принять</button>
+            <button class="btn btn-sm btn-danger reject-req-btn" data-id="${r.inviteCode}">❌ Отклонить</button>
           </div>
         </div>
       `).join('');
     }
 
     // --- USERS ---
-    function removeUser(inviteCode) {
+    async function removeUser(inviteCode) {
       console.log('removeUser click for code:', inviteCode);
       if(!confirm("Вы уверены, что хотите выгнать этого пользователя?")) return;
       
-      state.users = state.users.filter(u => String(u.inviteCode) !== String(inviteCode));
-      
-      // Also invalidate invite code to allow reuse logically or just keep as used
-      // For this app, simply remove user
+      await updateDoc(doc(db, 'users', inviteCode), { status: 'blocked' });
       
       if (state.currentUser && String(state.currentUser.inviteCode) === String(inviteCode)) {
-        state.currentUser = null;
-        saveState();
-        initApp();
-      } else {
-        saveState();
-        renderUsers();
+        logout();
       }
     }
 
@@ -659,7 +777,7 @@
           <div class="item-info">
             <div style="font-weight: 700; margin-bottom: 4px;">${u.name}</div>
             <div style="font-size: 0.875rem; color: var(--text-muted);">
-              Phone: ${u.phone} &nbsp;|&nbsp; Code: <span style="font-family: monospace;">${u.inviteCode}</span>
+              Email: ${u.email} &nbsp;|&nbsp; Code: <span style="font-family: monospace;">${u.inviteCode}</span>
             </div>
           </div>
           <div class="item-actions">
@@ -769,22 +887,23 @@
       renderCart();
     }
 
-    function placeOrder() {
+    async function placeOrder() {
       if (state.cart.length === 0) return alert("Корзина пуста");
       
+      const total = state.cart.reduce((sum, item) => sum + (item.price * item.quantity), 0);
       const orderData = {
-        id: Date.now(),
         customerName: state.currentUser.name,
-        customerPhone: state.currentUser.phone,
+        customerEmail: state.currentUser.email,
         customerInvite: state.currentUser.inviteCode,
-        items: [...state.cart],
-        total: state.cart.reduce((sum, item) => sum + (item.price * item.quantity), 0),
-        status: 'active'
+        itemsJson: JSON.stringify(state.cart),
+        total: total,
+        status: 'active',
+        createdAt: Date.now()
       };
 
-      state.orders_active.unshift(orderData);
+      const newOrderRef = doc(collection(db, 'orders'));
+      await setDoc(newOrderRef, orderData);
       
-      // Clear cart
       state.cart = [];
       saveState();
       renderCart();
@@ -797,7 +916,8 @@
       const container = document.getElementById(containerId);
       const sourceArray = type === 'active' ? state.orders_active : state.orders_archive;
       
-      const filtered = sourceArray.filter(o => o.customerInvite === state.currentUser.inviteCode);
+      // Filter logic deleted since arrays are already scoped to the inviteCode in setupRealtimeSync
+      const filtered = sourceArray;
 
       if (filtered.length === 0) {
         container.innerHTML = '<div style="color: var(--text-muted); text-align: center; padding: 20px;">Нет заказов</div>';
@@ -812,7 +932,7 @@
           </div>
           <div style="margin-bottom: 12px; font-size: 0.9375rem;">
             <strong>Имя:</strong> ${o.customerName} <br>
-            <strong>Телефон:</strong> ${o.customerPhone}
+            <strong>Email:</strong> ${o.customerEmail}
           </div>
           <div style="margin-bottom: 16px; font-size: 0.875rem; background: #f8fafc; padding: 12px; border-radius: 8px;">
             ${o.items.map(item => `
@@ -831,24 +951,15 @@
       `).join('');
     }
 
-    function markOrderReceived(id) {
+    async function markOrderReceived(id) {
       console.log('markOrderReceived click for id:', id);
       if(!confirm("Пометить заказ как 'Получил' и перенести в архив?")) return;
-      const index = state.orders_active.findIndex(o => o.id == id);
-      if (index !== -1) {
-        const [order] = state.orders_active.splice(index, 1);
-        order.status = 'archived';
-        state.orders_archive.unshift(order);
-        saveState();
-        renderClientOrders('active');
-      } else {
-        console.warn('Order not found');
-      }
+      
+      await updateDoc(doc(db, 'orders', id), { status: 'archived' });
     }
 
     // Explicitly attach all UI handlers to the window object 
     // to prevent ReferenceError due to bundler scoped variables
-    window.handleLogin = handleLogin;
     window.logout = logout;
     window.switchAdminTab = switchAdminTab;
     window.switchClientTab = switchClientTab;
