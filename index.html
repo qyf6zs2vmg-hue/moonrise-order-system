@@ -267,7 +267,7 @@
         <div id="pane-codes" class="tab-pane" style="display: block;">
           <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
             <h2 style="font-size: 1.25rem;">Инвайт коды</h2>
-            <button class="btn btn-sm" onclick="generateInviteCode()">Создать код</button>
+            <button class="btn btn-sm create-invite-btn">Создать код</button>
           </div>
           <div id="codes-list" style="display: flex; flex-direction: column;"></div>
         </div>
@@ -662,20 +662,22 @@
 
     // --- CODES ---
     async function generateInviteCode() {
-      console.log('generateInviteCode click');
-      const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
-      let codeStr = '';
-      for (let i = 0; i < 8; i++) {
-        codeStr += chars.charAt(Math.floor(Math.random() * chars.length));
-      }
-
       try {
+        console.log('generateInviteCode click step starts');
+        const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
+        let codeStr = '';
+        for (let i = 0; i < 8; i++) {
+          codeStr += chars.charAt(Math.floor(Math.random() * chars.length));
+        }
+
         await addDoc(collection(db, 'invites'), {
           code: codeStr,
           used: false,
           createdAt: Date.now(),
           createdBy: "admin"
         });
+        console.log('generateInviteCode success');
+        renderCodes();
       } catch (error) {
         console.error("Ошибка при генерации инвайт-кода:", error);
         alert("Ошибка создания кода");
@@ -976,24 +978,62 @@
 
     // Global Click Handler for dynamically created buttons
     document.addEventListener("click", function(e) {
-      if (e.target.classList.contains("edit-req-btn")) {
-        editRequestName(e.target.dataset.id);
-      } else if (e.target.classList.contains("approve-req-btn")) {
-        approveRequest(e.target.dataset.id);
-      } else if (e.target.classList.contains("reject-req-btn")) {
-        rejectRequest(e.target.dataset.id);
-      } else if (e.target.classList.contains("ban-user-btn")) {
-        removeUser(e.target.dataset.id);
-      } else if (e.target.classList.contains("add-to-cart-btn")) {
-        addToCart(Number(e.target.dataset.id));
-      } else if (e.target.classList.contains("qty-minus-btn")) {
-        changeQty(Number(e.target.dataset.id), -1);
-      } else if (e.target.classList.contains("qty-plus-btn")) {
-        changeQty(Number(e.target.dataset.id), 1);
-      } else if (e.target.classList.contains("mark-obj-btn")) {
-        markOrderReceived(e.target.dataset.id);
-      }
-    });
+
+  const createInviteBtn = e.target.closest(".create-invite-btn");
+  if (createInviteBtn) {
+    generateInviteCode();
+    return;
+  }
+
+  const editBtn = e.target.closest(".edit-req-btn");
+  if (editBtn) {
+    editRequestName(editBtn.dataset.id);
+    return;
+  }
+
+  const approveBtn = e.target.closest(".approve-req-btn");
+  if (approveBtn) {
+    approveRequest(approveBtn.dataset.id);
+    return;
+  }
+
+  const rejectBtn = e.target.closest(".reject-req-btn");
+  if (rejectBtn) {
+    rejectRequest(rejectBtn.dataset.id);
+    return;
+  }
+
+  const banBtn = e.target.closest(".ban-user-btn");
+  if (banBtn) {
+    removeUser(banBtn.dataset.id);
+    return;
+  }
+
+  const cartBtn = e.target.closest(".add-to-cart-btn");
+  if (cartBtn) {
+    addToCart(Number(cartBtn.dataset.id));
+    return;
+  }
+
+  const minusBtn = e.target.closest(".qty-minus-btn");
+  if (minusBtn) {
+    changeQty(Number(minusBtn.dataset.id), -1);
+    return;
+  }
+
+  const plusBtn = e.target.closest(".qty-plus-btn");
+  if (plusBtn) {
+    changeQty(Number(plusBtn.dataset.id), 1);
+    return;
+  }
+
+  const receivedBtn = e.target.closest(".mark-obj-btn");
+  if (receivedBtn) {
+    markOrderReceived(receivedBtn.dataset.id);
+    return;
+  }
+
+});
 
   </script>
 </body>
