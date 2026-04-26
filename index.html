@@ -345,7 +345,7 @@
 
   <!-- ================= JAVASCRIPT ================= -->
   <script type="module">
-    import { db, auth, signInWithEmailAndPassword, createUserWithEmailAndPassword, onAuthStateChanged, signOut, collection, doc, setDoc, getDoc, updateDoc, deleteDoc, onSnapshot, writeBatch } from './src/firebase.js';
+    import { db, auth, signInWithEmailAndPassword, createUserWithEmailAndPassword, onAuthStateChanged, signOut, collection, doc, setDoc, addDoc, where, getDocs, getDoc, updateDoc, deleteDoc, onSnapshot, query, writeBatch } from './src/firebase.js';
 
     // Firebase Auth session management
     onAuthStateChanged(auth, async (user) => {
@@ -604,9 +604,11 @@
       if (!inviteCode || !name || !email || !password) return alert("Заполните все поля");
 
       // 1. Check invite code
-      const inviteRef = doc(db, 'invites', inviteCode);
-      const inviteDoc = await getDoc(inviteRef);
-      if (!inviteDoc.exists()) return alert("Этот инвайт код не существует.");
+      const q = query(collection(db, 'invites'), where("code", "==", inviteCode));
+      const querySnapshot = await getDocs(q);
+      if (querySnapshot.empty) return alert("Этот инвайт код не существует.");
+      
+      const inviteDoc = querySnapshot.docs[0];
       if (inviteDoc.data().used) return alert("Этот инвайт код уже использован.");
 
       try {
@@ -624,7 +626,7 @@
           status: "pending",
           createdAt: Date.now(),
         });
-        batch.update(inviteRef, { used: true });
+        batch.update(inviteDoc.ref, { used: true });
         
         await batch.commit();
         alert("✅ Заявка отправлена успешно! Ожидайте одобрения администратором.");
@@ -663,15 +665,21 @@
       console.log('generateInviteCode click');
       const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
       let codeStr = '';
-      for(let i = 0; i < 8; i++) {
+      for (let i = 0; i < 8; i++) {
         codeStr += chars.charAt(Math.floor(Math.random() * chars.length));
       }
-      
-      await setDoc(doc(db, 'invites', codeStr), {
-        used: false,
-        createdAt: Date.now(),
-        createdBy: "admin"
-      });
+
+      try {
+        await addDoc(collection(db, 'invites'), {
+          code: codeStr,
+          used: false,
+          createdAt: Date.now(),
+          createdBy: "admin"
+        });
+      } catch (error) {
+        console.error("Ошибка при генерации инвайт-кода:", error);
+        alert("Ошибка создания кода");
+      }
     }
 
     function renderCodes() {
@@ -698,7 +706,7 @@
     // --- REQUESTS ---
     async function editRequestName(id) {
       console.log('editRequestName click for id:', id);
-      const req = state.requests.find(r => String(r.inviteCode) === String(id));
+      const req = state.requests.find(r => r.id === id);
       if (!req) return console.warn('Request not found');
       
       const newName = prompt("Введите новое имя клиента:", req.name);
@@ -715,20 +723,10 @@
 
     async function approveRequest(id) {
       console.log('approveRequest click for id:', id);
-      const req = state.requests.find(r => String(r.inviteCode) === String(id));
+      const req = state.requests.find(r => r.id === id);
       if (!req) return console.warn('Request not found');
       
-      const inviteRef = doc(db, 'invites', id);
-      const inviteDoc = await getDoc(inviteRef);
-      if (!inviteDoc.exists() || inviteDoc.data().used) {
-        alert("Ошибка: инвайт код был удалён или уже использован другой заявкой.");
-        return;
-      }
-
-      const batch = writeBatch(db);
-      batch.update(inviteRef, { used: true });
-      batch.update(doc(db, 'users', id), { status: 'active' });
-      await batch.commit();
+      await updateDoc(doc(db, 'users', id), { status: 'active' });
     }
 
     function renderRequests() {
@@ -745,22 +743,22 @@
             <div style="font-size: 0.875rem; color: var(--text-muted);">Код: <span style="font-family: monospace;">${r.inviteCode}</span></div>
           </div>
           <div class="item-actions">
-            <button class="btn btn-sm btn-outline edit-req-btn" data-id="${r.inviteCode}">✏️ Изменить имя</button>
-            <button class="btn btn-sm btn-success approve-req-btn" data-id="${r.inviteCode}">✔ Принять</button>
-            <button class="btn btn-sm btn-danger reject-req-btn" data-id="${r.inviteCode}">❌ Отклонить</button>
+            <button class="btn btn-sm btn-outline edit-req-btn" data-id="${r.id}">✏️ Изменить имя</button>
+            <button class="btn btn-sm btn-success approve-req-btn" data-id="${r.id}">✔ Принять</button>
+            <button class="btn btn-sm btn-danger reject-req-btn" data-id="${r.id}">❌ Отклонить</button>
           </div>
         </div>
       `).join('');
     }
 
     // --- USERS ---
-    async function removeUser(inviteCode) {
-      console.log('removeUser click for code:', inviteCode);
+    async function removeUser(id) {
+      console.log('removeUser click for id:', id);
       if(!confirm("Вы уверены, что хотите выгнать этого пользователя?")) return;
       
-      await updateDoc(doc(db, 'users', inviteCode), { status: 'blocked' });
+      await updateDoc(doc(db, 'users', id), { status: 'blocked' });
       
-      if (state.currentUser && String(state.currentUser.inviteCode) === String(inviteCode)) {
+      if (state.currentUser && state.currentUser.uid === id) {
         logout();
       }
     }
@@ -781,7 +779,7 @@
             </div>
           </div>
           <div class="item-actions">
-            <button class="btn btn-sm btn-danger ban-user-btn" data-id="${u.inviteCode}">Выгнать</button>
+            <button class="btn btn-sm btn-danger ban-user-btn" data-id="${u.id}">Выгнать</button>
           </div>
         </div>
       `).join('');
