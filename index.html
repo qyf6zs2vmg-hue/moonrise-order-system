@@ -1,0 +1,891 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Store | Invites & Admin</title>
+  <style>
+    /* -------------------------------------------------------------
+       CSS RESET & VARIABLES
+       ------------------------------------------------------------- */
+    :root {
+      --bg: #f8fafc;
+      --surface: rgba(255, 255, 255, 0.85);
+      --text-main: #1e293b;
+      --text-muted: #64748b;
+      --primary: #0f172a;
+      --primary-hover: #1e293b;
+      --success: #059669;
+      --success-hover: #047857;
+      --danger: #ef4444;
+      --danger-hover: #dc2626;
+      --border: #e2e8f0;
+      --radius: 20px;
+      --shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.05);
+      --font: 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body, html {
+      width: 100%; height: 100%;
+      font-family: var(--font);
+      background-color: var(--bg);
+      background-image: 
+        radial-gradient(at 0% 0%, #f0f9ff 0%, transparent 50%),
+        radial-gradient(at 100% 0%, #fef2f2 0%, transparent 50%),
+        radial-gradient(at 100% 100%, #f0fdf4 0%, transparent 50%),
+        radial-gradient(at 0% 100%, #fff7ed 0%, transparent 50%);
+      background-attachment: fixed;
+      color: var(--text-main);
+      -webkit-font-smoothing: antialiased;
+    }
+
+    /* -------------------------------------------------------------
+       SCREENS
+       ------------------------------------------------------------- */
+    .screen {
+      display: none;
+      width: 100%; height: 100%;
+      overflow-y: auto;
+    }
+    .screen.active {
+      display: flex;
+      flex-direction: column;
+    }
+
+    /* -------------------------------------------------------------
+       COMMON COMPONENTS
+       ------------------------------------------------------------- */
+    .card {
+      background: var(--surface);
+      backdrop-filter: blur(16px);
+      -webkit-backdrop-filter: blur(16px);
+      border: 1px solid rgba(255, 255, 255, 0.8);
+      border-radius: var(--radius);
+      box-shadow: var(--shadow);
+      padding: 32px;
+    }
+
+    .btn {
+      background: var(--primary);
+      color: white;
+      border: none;
+      padding: 12px 20px;
+      border-radius: 12px;
+      font-weight: 600;
+      font-size: 0.9375rem;
+      cursor: pointer;
+      transition: all 0.2s;
+      text-align: center;
+    }
+    .btn:hover { background: var(--primary-hover); transform: translateY(-1px); }
+    .btn:disabled { opacity: 0.5; cursor: not-allowed; transform: none; }
+    
+    .btn-sm { padding: 8px 12px; font-size: 0.875rem; border-radius: 8px; }
+    .btn-success { background: var(--success); }
+    .btn-success:hover { background: var(--success-hover); }
+    .btn-danger { background: var(--danger); }
+    .btn-danger:hover { background: var(--danger-hover); }
+    .btn-outline { background: transparent; color: var(--text-main); border: 1px solid var(--border); }
+    .btn-outline:hover { background: rgba(0,0,0,0.05); }
+
+    .input-group { margin-bottom: 20px; text-align: left; }
+    .input-group label { display: block; margin-bottom: 8px; font-weight: 600; font-size: 0.875rem; }
+    .input-group input {
+      width: 100%; padding: 12px 16px;
+      border-radius: 12px; border: 1px solid var(--border);
+      font-size: 1rem; transition: all 0.2s;
+      background: white;
+    }
+    .input-group input:focus { outline: none; border-color: var(--primary); }
+
+    .header-layout {
+      width: 100%; max-width: 1200px;
+      margin: 0 auto; padding: 24px 32px;
+      display: flex; justify-content: space-between; align-items: center;
+    }
+    .header-layout h1 { font-size: 1.5rem; font-weight: 800; letter-spacing: -0.5px; }
+
+    /* -------------------------------------------------------------
+       AUTH SCREEN
+       ------------------------------------------------------------- */
+    #auth-screen { align-items: center; justify-content: center; padding: 24px; }
+    .auth-box { width: 100%; max-width: 400px; text-align: center; }
+
+    /* -------------------------------------------------------------
+       ADMIN SCREEN
+       ------------------------------------------------------------- */
+    .admin-container { max-width: 1000px; width: 100%; margin: 0 auto; padding: 0 32px 40px; }
+    
+    .tabs { display: flex; gap: 12px; border-bottom: 2px solid var(--border); margin-bottom: 24px; }
+    .tab-btn {
+      background: transparent; border: none; padding: 12px 20px;
+      font-size: 1rem; font-weight: 600; color: var(--text-muted); cursor: pointer;
+      position: relative; top: 2px;
+    }
+    .tab-btn.active { color: var(--primary); border-bottom: 2px solid var(--primary); }
+    
+    .tab-pane { display: none; }
+
+    .list-item {
+      display: flex; justify-content: space-between; align-items: center;
+      padding: 16px; border-bottom: 1px solid var(--border);
+    }
+    .list-item:last-child { border-bottom: none; }
+    .item-info { font-size: 0.9375rem; }
+    .item-actions { display: flex; gap: 8px; }
+    .badge {
+      display: inline-block; padding: 4px 8px; border-radius: 6px; font-size: 0.75rem; font-weight: 700;
+      background: #e2e8f0; color: #475569;
+    }
+    .badge.success { background: #dcfce7; color: #166534; }
+    .badge.warning { background: #fef08a; color: #854d0e; }
+
+    /* -------------------------------------------------------------
+       CLIENT / STORE SCREEN
+       ------------------------------------------------------------- */
+    .shop-container {
+      display: flex; flex-direction: column; gap: 32px;
+      max-width: 1200px; width: 100%; margin: 0 auto; padding: 0 32px 40px;
+    }
+    @media (min-width: 768px) { .shop-container { flex-direction: row; align-items: flex-start; } }
+
+    .products-grid { flex: 1; overflow-x: auto; }
+    
+    .erp-table {
+      width: 100%;
+      border-collapse: separate;
+      border-spacing: 0;
+      background: white;
+      border-radius: 12px;
+      overflow: hidden;
+      border: 1px solid var(--border);
+    }
+    .erp-table th, .erp-table td {
+      padding: 16px;
+      text-align: left;
+      border-bottom: 1px solid var(--border);
+      font-size: 0.9375rem;
+    }
+    .erp-table th {
+      background: #f8fafc;
+      font-weight: 600;
+      color: var(--text-main);
+      text-transform: uppercase;
+      font-size: 0.75rem;
+      letter-spacing: 0.5px;
+    }
+    .erp-table tr:last-child td {
+      border-bottom: none;
+    }
+    .erp-table tbody tr:hover {
+      background: #f1f5f9;
+    }
+
+    .cart-panel { position: sticky; top: 24px; width: 100%; }
+    @media (min-width: 768px) { .cart-panel { width: 360px; flex-shrink: 0; } }
+    
+    .cart-header { display: flex; justify-content: space-between; font-weight: 700; font-size: 1.25rem; margin-bottom: 20px; }
+    .cart-items { max-height: 40vh; overflow-y: auto; display: flex; flex-direction: column; gap: 12px; margin-bottom: 20px; }
+    .cart-item { display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--border); padding-bottom: 12px; }
+    .qty-controls { display: flex; align-items: center; gap: 8px; }
+    .qty-btn {
+      width: 28px; height: 28px; border-radius: 6px; border: 1px solid var(--border); background: white;
+      font-weight: bold; cursor: pointer; display: flex; align-items: center; justify-content: center;
+    }
+    .cart-total { display: flex; justify-content: space-between; font-weight: 800; font-size: 1.25rem; padding-top: 20px; border-top: 2px dashed var(--border); margin-bottom: 20px; }
+  </style>
+</head>
+<body>
+
+  <!-- ================= AUTH SCREEN ================= -->
+  <div id="auth-screen" class="screen">
+    <div class="card auth-box">
+      <h2 style="margin-bottom: 8px;">Вход в систему</h2>
+      <p style="color: var(--text-muted); margin-bottom: 24px; font-size: 0.9375rem;">Введите инвайт-код для авторизации или подачи заявки</p>
+      
+      <form id="auth-form" onsubmit="handleLogin(event)">
+        <div class="input-group">
+          <label>Инвайт код</label>
+          <input type="text" id="auth-code" required placeholder="Например: A7fK29xZ">
+        </div>
+        
+        <div class="input-group" id="auth-name-group">
+          <label>Ваше Имя (для новых)</label>
+          <input type="text" id="auth-name" placeholder="John Doe">
+        </div>
+        
+        <div class="input-group" id="auth-phone-group">
+          <label>Телефон (для новых)</label>
+          <input type="tel" id="auth-phone" placeholder="+998 90 123 45 67">
+        </div>
+        
+        <button type="submit" class="btn" style="width: 100%; margin-top: 8px;">Продолжить</button>
+      </form>
+    </div>
+  </div>
+
+  <!-- ================= ADMIN SCREEN ================= -->
+  <div id="admin-screen" class="screen">
+    <header class="header-layout">
+      <h1>Admin Panel</h1>
+      <button class="btn btn-outline btn-sm" onclick="logout()">Выйти</button>
+    </header>
+
+    <div class="admin-container">
+      <div class="tabs">
+        <button class="tab-btn active" id="tab-btn-codes" onclick="switchAdminTab('codes')">Codes</button>
+        <button class="tab-btn" id="tab-btn-requests" onclick="switchAdminTab('requests')">Requests</button>
+        <button class="tab-btn" id="tab-btn-users" onclick="switchAdminTab('users')">Users</button>
+      </div>
+
+      <div class="card">
+        <!-- Codes Pane -->
+        <div id="pane-codes" class="tab-pane" style="display: block;">
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+            <h2 style="font-size: 1.25rem;">Инвайт коды</h2>
+            <button class="btn btn-sm" onclick="generateInviteCode()">Создать код</button>
+          </div>
+          <div id="codes-list" style="display: flex; flex-direction: column;"></div>
+        </div>
+
+        <!-- Requests Pane -->
+        <div id="pane-requests" class="tab-pane">
+          <h2 style="font-size: 1.25rem; margin-bottom: 20px;">Заявки на регистрацию</h2>
+          <div id="requests-list" style="display: flex; flex-direction: column;"></div>
+        </div>
+
+        <!-- Users Pane -->
+        <div id="pane-users" class="tab-pane">
+          <h2 style="font-size: 1.25rem; margin-bottom: 20px;">Зарегистрированные пользователи</h2>
+          <div id="users-list" style="display: flex; flex-direction: column;"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ================= CLIENT SCREEN ================= -->
+  <div id="client-screen" class="screen">
+    <header class="header-layout" style="padding-bottom: 0;">
+      <h1>Store.</h1>
+      <div style="display: flex; align-items: center; gap: 16px;">
+        <span id="client-name" style="font-weight: 600; color: var(--text-muted);"></span>
+        <button class="btn btn-outline btn-sm" onclick="logout()">Выйти</button>
+      </div>
+    </header>
+
+    <div class="client-tabs-container" style="max-width: 1200px; margin: 0 auto; padding: 24px 32px;">
+      <div class="tabs">
+        <button class="tab-btn active" id="c-btn-shop" onclick="switchClientTab('shop')">Магазин</button>
+        <button class="tab-btn" id="c-btn-active" onclick="switchClientTab('active')">Активные заказы</button>
+        <button class="tab-btn" id="c-btn-archive" onclick="switchClientTab('archive')">Архив заказов</button>
+      </div>
+    </div>
+
+    <!-- Shop Pane -->
+    <div id="c-pane-shop" class="tab-pane" style="display: block;">
+      <div class="shop-container">
+        <!-- Products Table -->
+        <div class="products-grid" id="products-grid"></div>
+
+        <!-- Cart -->
+        <div class="card cart-panel">
+          <div class="cart-header">
+            <span>Корзина</span>
+          </div>
+          <div class="cart-items" id="cart-items"></div>
+          <div class="cart-total">
+            <span>Итого:</span>
+            <span id="cart-total-price">$0</span>
+          </div>
+          <button class="btn" style="width: 100%;" onclick="placeOrder()">Оформить Заказ</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Active Orders Pane -->
+    <div id="c-pane-active" class="tab-pane">
+      <div class="card" style="max-width: 1000px; margin: 0 auto;">
+        <h2 style="font-size: 1.25rem; margin-bottom: 20px;">Мои активные заказы</h2>
+        <div id="client-active-list" style="display: flex; flex-direction: column;"></div>
+      </div>
+    </div>
+
+    <!-- Archive Orders Pane -->
+    <div id="c-pane-archive" class="tab-pane">
+      <div class="card" style="max-width: 1000px; margin: 0 auto;">
+        <h2 style="font-size: 1.25rem; margin-bottom: 20px;">Архив заказов</h2>
+        <div id="client-archive-list" style="display: flex; flex-direction: column;"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ================= JAVASCRIPT ================= -->
+  <script>
+    /**
+     * 1. STATE & CONSTANTS
+     */
+    const ADMIN_CODE = "MoonriseadmiN4321";
+
+    const STORE_PRODUCTS = [
+      { id: 1, name: 'Cola', price: 10, stock: 154, icon: '🥤' },
+      { id: 2, name: 'Pepsi', price: 12, stock: 89, icon: '🔵' },
+      { id: 3, name: 'Fanta', price: 11, stock: 21, icon: '🍊' }
+    ];
+
+    let state = {
+      currentUser: null,
+      users: [],
+      inviteCodes: [],
+      requests: [],
+      cart: [],
+      orders_active: [],
+      orders_archive: []
+    };
+
+    /**
+     * 2. LOCAL STORAGE UTILS
+     */
+    function loadState() {
+      const saved = localStorage.getItem('appState_v1');
+      if (saved) {
+        state = { ...state, ...JSON.parse(saved) };
+      }
+      if (!state.orders_active) state.orders_active = [];
+      if (!state.orders_archive) state.orders_archive = [];
+      if (!state.users) state.users = [];
+      
+      // Migrate old format if needed
+      if (state.orders) {
+        state.orders_active.push(...state.orders.filter(o => o.status !== 'archived'));
+        state.orders_archive.push(...state.orders.filter(o => o.status === 'archived'));
+        delete state.orders;
+        saveState();
+      }
+
+      // Add missing IDs to legacy data
+      let stateModified = false;
+      state.orders_active.forEach((o, i) => { if (o.id === undefined) { o.id = Date.now() + i; stateModified = true; } });
+      state.orders_archive.forEach((o, i) => { if (o.id === undefined) { o.id = Date.now() + i + 10000; stateModified = true; } });
+      state.users.forEach((u, i) => { if (u.inviteCode === undefined) { u.inviteCode = 'LEGACY_' + (Date.now() + i); stateModified = true; } });
+      state.requests.forEach((r, i) => { if (r.id === undefined) { r.id = Date.now() + i + 20000; stateModified = true; } });
+      
+      if (stateModified) saveState();
+    }
+
+    function saveState() {
+      localStorage.setItem('appState_v1', JSON.stringify(state));
+    }
+
+    /**
+     * 3. INIT & ROUTING
+     */
+    function initApp() {
+      loadState();
+
+      document.getElementById('auth-screen').classList.remove('active');
+      document.getElementById('admin-screen').classList.remove('active');
+      document.getElementById('client-screen').classList.remove('active');
+
+      if (!state.currentUser) {
+        document.getElementById('auth-screen').classList.add('active');
+      } else if (state.currentUser.role === 'admin') {
+        document.getElementById('admin-screen').classList.add('active');
+        switchAdminTab('codes');
+      } else if (state.currentUser.role === 'client') {
+        document.getElementById('client-screen').classList.add('active');
+        document.getElementById('client-name').innerText = state.currentUser.name;
+        switchClientTab('shop');
+        renderClientShop();
+        renderCart();
+      }
+    }
+
+    function switchClientTab(tabId) {
+      ['shop', 'active', 'archive'].forEach(id => {
+        document.getElementById(`c-btn-${id}`).classList.remove('active');
+        document.getElementById(`c-pane-${id}`).style.display = 'none';
+      });
+      document.getElementById(`c-btn-${tabId}`).classList.add('active');
+      document.getElementById(`c-pane-${tabId}`).style.display = 'block';
+
+      if (tabId === 'active') renderClientOrders('active');
+      if (tabId === 'archive') renderClientOrders('archive');
+    }
+
+    function logout() {
+      state.currentUser = null;
+      saveState();
+      initApp();
+    }
+
+    /**
+     * UI Hint for Admin code
+     */
+    document.getElementById('auth-code').addEventListener('input', (e) => {
+      const isAd = e.target.value.trim() === ADMIN_CODE;
+      document.getElementById('auth-name-group').style.opacity = isAd ? "0.3" : "1";
+      document.getElementById('auth-phone-group').style.opacity = isAd ? "0.3" : "1";
+    });
+
+    /**
+     * 4. AUTH & REQUEST LOGIC
+     */
+    function handleLogin(e) {
+      e.preventDefault();
+      
+      const code = document.getElementById('auth-code').value.trim();
+      const name = document.getElementById('auth-name').value.trim();
+      let phone = document.getElementById('auth-phone').value.trim();
+
+      if (!code) return alert("Введите инвайт код");
+
+      // Admin Bypass
+      if (code === ADMIN_CODE) {
+        state.currentUser = { role: "admin" };
+        saveState();
+        initApp();
+        return;
+      }
+
+      // Check if user already exists
+      const existingUser = state.users.find(u => u.inviteCode === code);
+      if (existingUser) {
+        state.currentUser = existingUser;
+        saveState();
+        initApp();
+        return;
+      }
+
+      // Handle new registration request
+      const invite = state.inviteCodes.find(c => c.code === code);
+      if (!invite) return alert("Этот инвайт код не существует.");
+      if (invite.used) return alert("Этот инвайт код уже использован.");
+
+      const existingReq = state.requests.find(r => r.inviteCode === code);
+      if (existingReq) return alert("Заявка с этим кодом уже находится на рассмотрении Администратором.");
+
+      if (phone) {
+        let phoneVal = phone.replace(/[^0-9+]/g, '');
+        if (!phoneVal.startsWith('+998')) {
+          const clean = phoneVal.replace(/^\+?(998)?/, '');
+          phoneVal = '+998' + clean;
+        }
+        if (!/^\+998\d{9}$/.test(phoneVal)) {
+           return alert("Неверный формат телефона! Воспользуйтесь форматом Узб: +998 XX XXX XX XX");
+        }
+        document.getElementById('auth-phone').value = phoneVal;
+        phone = phoneVal;
+      }
+
+      if (!name || !phone) {
+        return alert("Для подачи заявки необходимо заполнить Имя и Телефон.");
+      }
+
+      // Create request
+      state.requests.push({
+        id: Date.now(),
+        name,
+        phone,
+        inviteCode: code,
+        status: "pending"
+      });
+      
+      saveState();
+      document.getElementById('auth-form').reset();
+      alert("✅ Заявка отправлена успешно! Ожидайте одобрения администратором.");
+    }
+
+    /**
+     * 5. ADMIN PANEL LOGIC
+     */
+    function switchAdminTab(tabId) {
+      document.querySelectorAll('#admin-screen .tab-btn').forEach(b => b.classList.remove('active'));
+      document.getElementById(`tab-btn-${tabId}`).classList.add('active');
+
+      document.querySelectorAll('#admin-screen .tab-pane').forEach(p => p.style.display = 'none');
+      document.getElementById(`pane-${tabId}`).style.display = 'block';
+
+      if (tabId === 'codes') renderCodes();
+      if (tabId === 'requests') renderRequests();
+      if (tabId === 'users') renderUsers();
+    }
+
+    // --- CODES ---
+    function generateInviteCode() {
+      console.log('generateInviteCode click');
+      const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
+      let codeStr = '';
+      for(let i = 0; i < 8; i++) {
+        codeStr += chars.charAt(Math.floor(Math.random() * chars.length));
+      }
+      
+      state.inviteCodes.unshift({
+        code: codeStr,
+        used: false,
+        createdAt: Date.now()
+      });
+      saveState();
+      renderCodes();
+    }
+
+    function renderCodes() {
+      const container = document.getElementById('codes-list');
+      if (state.inviteCodes.length === 0) {
+        container.innerHTML = '<div style="color: var(--text-muted); text-align: center; padding: 20px;">Нет сгенерированных кодов</div>';
+        return;
+      }
+
+      container.innerHTML = state.inviteCodes.map(c => `
+        <div class="list-item">
+          <div class="item-info">
+            <strong style="font-family: monospace; font-size: 1.125rem;">${c.code}</strong>
+          </div>
+          <div>
+            ${c.used 
+              ? '<span class="badge warning">Использован</span>' 
+              : '<span class="badge success">Доступен</span>'}
+          </div>
+        </div>
+      `).join('');
+    }
+
+    // --- REQUESTS ---
+    function editRequestName(id) {
+      console.log('editRequestName click for id:', id);
+      const req = state.requests.find(r => String(r.id) === String(id));
+      if (!req) return console.warn('Request not found');
+      
+      const newName = prompt("Введите новое имя клиента:", req.name);
+      if (newName !== null && newName.trim() !== '') {
+        req.name = newName.trim();
+        saveState();
+        renderRequests();
+      }
+    }
+
+    function rejectRequest(id) {
+      console.log('rejectRequest click for id:', id);
+      if(!confirm("Удалить заявку?")) return;
+      state.requests = state.requests.filter(r => String(r.id) !== String(id));
+      saveState();
+      renderRequests();
+    }
+
+    function approveRequest(id) {
+      console.log('approveRequest click for id:', id);
+      const reqIndex = state.requests.findIndex(r => String(r.id) === String(id));
+      if (reqIndex === -1) return console.warn('Request not found');
+      const req = state.requests[reqIndex];
+      
+      // Double check invite code
+      const codeObj = state.inviteCodes.find(c => c.code === req.inviteCode);
+      if (!codeObj || codeObj.used) {
+        alert("Ошибка: инвайт код был удалён или уже использован другой заявкой.");
+        return;
+      }
+
+      // Mark code as used
+      codeObj.used = true;
+
+      // Create User
+      state.users.unshift({
+        role: "client",
+        name: req.name,
+        phone: req.phone,
+        inviteCode: req.inviteCode,
+        createdAt: Date.now()
+      });
+
+      // Remove request
+      state.requests.splice(reqIndex, 1);
+      
+      saveState();
+      renderRequests();
+    }
+
+    function renderRequests() {
+      const container = document.getElementById('requests-list');
+      if (state.requests.length === 0) {
+        container.innerHTML = '<div style="color: var(--text-muted); text-align: center; padding: 20px;">Нет активных заявок</div>';
+        return;
+      }
+
+      container.innerHTML = state.requests.map(r => `
+        <div class="list-item">
+          <div class="item-info">
+            <div style="font-weight: 700; margin-bottom: 4px;">${r.name} <span class="badge">${r.phone}</span></div>
+            <div style="font-size: 0.875rem; color: var(--text-muted);">Код: <span style="font-family: monospace;">${r.inviteCode}</span></div>
+          </div>
+          <div class="item-actions">
+            <button class="btn btn-sm btn-outline edit-req-btn" data-id="${r.id}">✏️ Изменить имя</button>
+            <button class="btn btn-sm btn-success approve-req-btn" data-id="${r.id}">✔ Принять</button>
+            <button class="btn btn-sm btn-danger reject-req-btn" data-id="${r.id}">❌ Отклонить</button>
+          </div>
+        </div>
+      `).join('');
+    }
+
+    // --- USERS ---
+    function removeUser(inviteCode) {
+      console.log('removeUser click for code:', inviteCode);
+      if(!confirm("Вы уверены, что хотите выгнать этого пользователя?")) return;
+      
+      state.users = state.users.filter(u => String(u.inviteCode) !== String(inviteCode));
+      
+      // Also invalidate invite code to allow reuse logically or just keep as used
+      // For this app, simply remove user
+      
+      if (state.currentUser && String(state.currentUser.inviteCode) === String(inviteCode)) {
+        state.currentUser = null;
+        saveState();
+        initApp();
+      } else {
+        saveState();
+        renderUsers();
+      }
+    }
+
+    function renderUsers() {
+      const container = document.getElementById('users-list');
+      if (state.users.length === 0) {
+        container.innerHTML = '<div style="color: var(--text-muted); text-align: center; padding: 20px;">Нет зарегистрированных клиентов</div>';
+        return;
+      }
+
+      container.innerHTML = state.users.map(u => `
+        <div class="list-item">
+          <div class="item-info">
+            <div style="font-weight: 700; margin-bottom: 4px;">${u.name}</div>
+            <div style="font-size: 0.875rem; color: var(--text-muted);">
+              Phone: ${u.phone} &nbsp;|&nbsp; Code: <span style="font-family: monospace;">${u.inviteCode}</span>
+            </div>
+          </div>
+          <div class="item-actions">
+            <button class="btn btn-sm btn-danger ban-user-btn" data-id="${u.inviteCode}">Выгнать</button>
+          </div>
+        </div>
+      `).join('');
+    }
+
+    /**
+     * 6. CLIENT SHOP LOGIC
+     */
+    function renderClientShop() {
+      const grid = document.getElementById('products-grid');
+      
+      let html = `
+        <table class="erp-table">
+          <thead>
+            <tr>
+              <th>Название</th>
+              <th>Цена</th>
+              <th>Остаток</th>
+              <th style="width: 100px;">Действие</th>
+            </tr>
+          </thead>
+          <tbody>
+      `;
+      
+      html += STORE_PRODUCTS.map(p => `
+        <tr>
+          <td>
+            <div style="display: flex; align-items: center; gap: 8px;">
+              <span style="font-size: 1.25rem;">${p.icon}</span>
+              <span style="font-weight: 600;">${p.name}</span>
+            </div>
+          </td>
+          <td style="font-weight: 600; color: var(--text-muted);">$${p.price}</td>
+          <td>${p.stock}</td>
+          <td>
+            <button class="btn btn-sm btn-outline add-to-cart-btn" style="width: 100%; white-space: nowrap;" data-id="${p.id}">Добавить</button>
+          </td>
+        </tr>
+      `).join('');
+      
+      html += `
+          </tbody>
+        </table>
+      `;
+      grid.innerHTML = html;
+    }
+
+    function renderCart() {
+      const container = document.getElementById('cart-items');
+      const totalEl = document.getElementById('cart-total-price');
+      
+      let total = 0;
+
+      if(state.cart.length === 0) {
+        container.innerHTML = '<div style="text-align: center; color: var(--text-muted); padding: 20px;">Пусто</div>';
+        totalEl.innerText = '$0';
+        return;
+      }
+
+      container.innerHTML = state.cart.map(item => {
+        total += item.price * item.quantity;
+        return `
+          <div class="cart-item">
+            <div>
+              <div style="font-weight: 700; font-size: 0.9375rem;">${item.name}</div>
+              <div style="font-size: 0.875rem; color: var(--text-muted);">$${item.price} &times; ${item.quantity} </div>
+            </div>
+            <div class="qty-controls">
+               <button class="qty-btn qty-minus-btn" data-id="${item.id}">-</button>
+               <span style="font-weight: 700; min-width: 20px; text-align: center;">${item.quantity}</span>
+               <button class="qty-btn qty-plus-btn" data-id="${item.id}">+</button>
+            </div>
+          </div>
+        `;
+      }).join('');
+      
+      totalEl.innerText = `$${total}`;
+    }
+
+    function addToCart(id) {
+      const product = STORE_PRODUCTS.find(p => p.id === id);
+      if(!product) return;
+      
+      const existing = state.cart.find(item => item.id === id);
+      if (existing) {
+        existing.quantity++;
+      } else {
+        state.cart.push({ ...product, quantity: 1 });
+      }
+      saveState();
+      renderCart();
+    }
+
+    function changeQty(id, delta) {
+      const item = state.cart.find(i => i.id === id);
+      if(!item) return;
+      
+      item.quantity += delta;
+      if (item.quantity <= 0) {
+        state.cart = state.cart.filter(i => i.id !== id);
+      }
+      saveState();
+      renderCart();
+    }
+
+    function placeOrder() {
+      if (state.cart.length === 0) return alert("Корзина пуста");
+      
+      const orderData = {
+        id: Date.now(),
+        customerName: state.currentUser.name,
+        customerPhone: state.currentUser.phone,
+        customerInvite: state.currentUser.inviteCode,
+        items: [...state.cart],
+        total: state.cart.reduce((sum, item) => sum + (item.price * item.quantity), 0),
+        status: 'active'
+      };
+
+      state.orders_active.unshift(orderData);
+      
+      // Clear cart
+      state.cart = [];
+      saveState();
+      renderCart();
+      switchClientTab('active');
+      alert("✅ Ваш заказ успешно оформлен! Вы перенаправлены в 'Активные заказы'");
+    }
+
+    function renderClientOrders(type) {
+      const containerId = type === 'active' ? 'client-active-list' : 'client-archive-list';
+      const container = document.getElementById(containerId);
+      const sourceArray = type === 'active' ? state.orders_active : state.orders_archive;
+      
+      const filtered = sourceArray.filter(o => o.customerInvite === state.currentUser.inviteCode);
+
+      if (filtered.length === 0) {
+        container.innerHTML = '<div style="color: var(--text-muted); text-align: center; padding: 20px;">Нет заказов</div>';
+        return;
+      }
+
+      container.innerHTML = filtered.map(o => `
+        <div class="list-item" style="display: block; border: 1px solid var(--border); border-radius: 8px; margin-bottom: 12px; padding: 16px;">
+          <div style="display: flex; justify-content: space-between; border-bottom: 1px dashed var(--border); padding-bottom: 12px; margin-bottom: 12px;">
+            <div style="font-weight: 700; font-size: 1.125rem;">Заказ #${o.id}</div>
+            <div style="font-weight: 800; color: var(--success);">$${o.total}</div>
+          </div>
+          <div style="margin-bottom: 12px; font-size: 0.9375rem;">
+            <strong>Имя:</strong> ${o.customerName} <br>
+            <strong>Телефон:</strong> ${o.customerPhone}
+          </div>
+          <div style="margin-bottom: 16px; font-size: 0.875rem; background: #f8fafc; padding: 12px; border-radius: 8px;">
+            ${o.items.map(item => `
+              <div style="display: flex; justify-content: space-between; margin-bottom: 4px;">
+                <span>${item.name} x${item.quantity}</span>
+                <span style="font-weight: 600;">$${item.price * item.quantity}</span>
+              </div>
+            `).join('')}
+          </div>
+          ${type === 'active' ? `
+            <div style="text-align: right;">
+              <button class="btn btn-sm btn-success mark-obj-btn" data-id="${o.id}">Получил</button>
+            </div>
+          ` : ''}
+        </div>
+      `).join('');
+    }
+
+    function markOrderReceived(id) {
+      console.log('markOrderReceived click for id:', id);
+      if(!confirm("Пометить заказ как 'Получил' и перенести в архив?")) return;
+      const index = state.orders_active.findIndex(o => o.id == id);
+      if (index !== -1) {
+        const [order] = state.orders_active.splice(index, 1);
+        order.status = 'archived';
+        state.orders_archive.unshift(order);
+        saveState();
+        renderClientOrders('active');
+      } else {
+        console.warn('Order not found');
+      }
+    }
+
+    // Explicitly attach all UI handlers to the window object 
+    // to prevent ReferenceError due to bundler scoped variables
+    window.handleLogin = handleLogin;
+    window.logout = logout;
+    window.switchAdminTab = switchAdminTab;
+    window.switchClientTab = switchClientTab;
+    window.generateInviteCode = generateInviteCode;
+    window.editRequestName = editRequestName;
+    window.rejectRequest = rejectRequest;
+    window.approveRequest = approveRequest;
+    window.removeUser = removeUser;
+    window.addToCart = addToCart;
+    window.changeQty = changeQty;
+    window.placeOrder = placeOrder;
+    window.markOrderReceived = markOrderReceived;
+
+    // Initialize App strictly after DOM loads
+    document.addEventListener("DOMContentLoaded", initApp);
+
+    // Global Click Handler for dynamically created buttons
+    document.addEventListener("click", function(e) {
+      if (e.target.classList.contains("edit-req-btn")) {
+        editRequestName(e.target.dataset.id);
+      } else if (e.target.classList.contains("approve-req-btn")) {
+        approveRequest(e.target.dataset.id);
+      } else if (e.target.classList.contains("reject-req-btn")) {
+        rejectRequest(e.target.dataset.id);
+      } else if (e.target.classList.contains("ban-user-btn")) {
+        removeUser(e.target.dataset.id);
+      } else if (e.target.classList.contains("add-to-cart-btn")) {
+        addToCart(Number(e.target.dataset.id));
+      } else if (e.target.classList.contains("qty-minus-btn")) {
+        changeQty(Number(e.target.dataset.id), -1);
+      } else if (e.target.classList.contains("qty-plus-btn")) {
+        changeQty(Number(e.target.dataset.id), 1);
+      } else if (e.target.classList.contains("mark-obj-btn")) {
+        markOrderReceived(e.target.dataset.id);
+      }
+    });
+
+  </script>
+</body>
+</html>
