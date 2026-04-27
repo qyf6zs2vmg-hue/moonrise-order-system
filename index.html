@@ -269,7 +269,7 @@
             <h2 style="font-size: 1.25rem;">Инвайт коды</h2>
             <button class="btn btn-sm create-invite-btn">Create Invite</button>
           </div>
-          <div id="codes-list" style="display: flex; flex-direction: column;"></div>
+          <div id="invites-list" style="display: flex; flex-direction: column;"></div>
         </div>
 
         <!-- Requests Pane -->
@@ -369,7 +369,7 @@
           state.inviteCodes = snap.docs.map(d => ({ code: d.id, ...d.data() }));
           state.inviteCodes.sort((a,b) => b.createdAt - a.createdAt);
           const paneCodes = document.getElementById('pane-codes');
-          if (paneCodes && paneCodes.style.display === 'block') renderCodes();
+          if (paneCodes && paneCodes.style.display === 'block') renderInvites(state.inviteCodes);
         }));
         unsubscribes.push(onSnapshot(collection(db, 'users'), snap => {
           const allUsers = snap.docs.map(d => ({ id: d.id, ...d.data() }));
@@ -413,7 +413,7 @@
             state.inviteCodes = snap.docs.map(d => ({ code: d.id, ...d.data() }));
             state.inviteCodes.sort((a,b) => b.createdAt - a.createdAt);
             const paneCodes = document.getElementById('pane-codes');
-            if (paneCodes && paneCodes.style.display === 'block') renderCodes();
+            if (paneCodes && paneCodes.style.display === 'block') renderInvites(state.inviteCodes);
           }));
 
           unsubscribes.push(onSnapshot(collection(db, 'users'), snap => {
@@ -654,13 +654,32 @@
       const activePane = document.getElementById(`pane-${tabId}`);
       if (activePane) activePane.style.display = 'block';
 
-      if (tabId === 'codes') renderCodes();
+      if (tabId === 'codes') renderInvites(state.inviteCodes);
       if (tabId === 'requests') renderRequests();
       if (tabId === 'users') renderUsers();
     }
     const switchAdminTab = window.switchAdminTab;
 
     // --- CODES ---
+    async function loadInvites() {
+      try {
+        const querySnapshot = await getDocs(collection(db, "invites"));
+        const invites = [];
+        querySnapshot.forEach((doc) => {
+          invites.push({
+            id: doc.id,
+            ...doc.data()
+          });
+        });
+        
+        console.log("INVITES:", invites);
+        state.inviteCodes = invites.sort((a,b) => b.createdAt - a.createdAt);
+        renderInvites(state.inviteCodes);
+      } catch (error) {
+        console.error("Error loading invites:", error);
+      }
+    }
+
     async function generateInviteCode() {
       try {
         console.log("FUNCTION STARTED");
@@ -679,32 +698,41 @@
         });
         console.log('INVITE SAVED');
         alert("Invite created successfully");
-        renderCodes();
+        loadInvites(); // Reload after creation
       } catch (error) {
         console.error("FIREBASE ERROR:", error);
         alert(error.message);
       }
     }
 
-    function renderCodes() {
-      const container = document.getElementById('codes-list');
-      if (state.inviteCodes.length === 0) {
+    function renderInvites(invites) {
+      console.log("Rendering invites");
+      const container = document.getElementById("invites-list");
+      container.innerHTML = "";
+      
+      if (!invites || invites.length === 0) {
         container.innerHTML = '<div style="color: var(--text-muted); text-align: center; padding: 20px;">Нет сгенерированных кодов</div>';
         return;
       }
 
-      container.innerHTML = state.inviteCodes.map(c => `
-        <div class="list-item">
+      invites.forEach(invite => {
+        const el = document.createElement("div");
+        el.className = "list-item";
+        
+        const usedHtml = invite.used 
+          ? '<span class="badge warning">Использован</span>' 
+          : '<span class="badge success">Доступен</span>';
+
+        el.innerHTML = `
           <div class="item-info">
-            <strong style="font-family: monospace; font-size: 1.125rem;">${c.code}</strong>
+            <strong style="font-family: monospace; font-size: 1.125rem;">${invite.code}</strong>
           </div>
           <div>
-            ${c.used 
-              ? '<span class="badge warning">Использован</span>' 
-              : '<span class="badge success">Доступен</span>'}
+            ${usedHtml}
           </div>
-        </div>
-      `).join('');
+        `;
+        container.appendChild(el);
+      });
     }
 
     // --- REQUESTS ---
@@ -976,7 +1004,10 @@
     window.markOrderReceived = markOrderReceived;
 
     // Initialize App strictly after DOM loads
-    document.addEventListener("DOMContentLoaded", initApp);
+    document.addEventListener("DOMContentLoaded", () => {
+      initApp();
+      loadInvites();
+    });
 
     // Global Click Handler for dynamically created buttons
     document.addEventListener("click", function(e) {
