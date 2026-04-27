@@ -371,15 +371,20 @@
           const paneCodes = document.getElementById('pane-codes');
           if (paneCodes && paneCodes.style.display === 'block') renderInvites(state.inviteCodes);
         }));
-        unsubscribes.push(onSnapshot(collection(db, 'users'), snap => {
-          const allUsers = snap.docs.map(d => ({ id: d.id, ...d.data() }));
-          state.requests = allUsers.filter(u => u.status === 'pending');
-          state.users = allUsers.filter(u => u.status === 'active');
-          state.requests.sort((a,b) => b.createdAt - a.createdAt);
-          state.users.sort((a,b) => b.createdAt - a.createdAt);
+        unsubscribes.push(onSnapshot(collection(db, 'users'), (snapshot) => {
+          const users = [];
+          snapshot.forEach(doc => {
+            users.push({ id: doc.id, ...doc.data() });
+          });
+          console.log("LOADED USERS:", users);
+          
+          state.allUsers = users; // save for tabs
+          state.requests = users.filter(u => u.status === 'pending');
+          state.users = users.filter(u => u.status === 'active');
+          
           const paneReqs = document.getElementById('pane-requests');
           const paneUsers = document.getElementById('pane-users');
-          if (paneReqs && paneReqs.style.display === 'block') renderRequests();
+          if (paneReqs && paneReqs.style.display === 'block') renderRequests(users);
           if (paneUsers && paneUsers.style.display === 'block') renderUsers();
         }));
         initApp();
@@ -416,15 +421,20 @@
             if (paneCodes && paneCodes.style.display === 'block') renderInvites(state.inviteCodes);
           }));
 
-          unsubscribes.push(onSnapshot(collection(db, 'users'), snap => {
-            const allUsers = snap.docs.map(d => ({ id: d.id, ...d.data() }));
-            state.requests = allUsers.filter(u => u.status === 'pending');
-            state.users = allUsers.filter(u => u.status === 'active');
-            state.requests.sort((a,b) => b.createdAt - a.createdAt);
-            state.users.sort((a,b) => b.createdAt - a.createdAt);
+          unsubscribes.push(onSnapshot(collection(db, 'users'), (snapshot) => {
+            const users = [];
+            snapshot.forEach(doc => {
+              users.push({ id: doc.id, ...doc.data() });
+            });
+            console.log("LOADED USERS:", users);
+            
+            state.allUsers = users; // save for tabs
+            state.requests = users.filter(u => u.status === 'pending');
+            state.users = users.filter(u => u.status === 'active');
+            
             const paneReqs = document.getElementById('pane-requests');
             const paneUsers = document.getElementById('pane-users');
-            if (paneReqs && paneReqs.style.display === 'block') renderRequests();
+            if (paneReqs && paneReqs.style.display === 'block') renderRequests(users);
             if (paneUsers && paneUsers.style.display === 'block') renderUsers();
           }));
         } else if (state.currentUser.role === 'client' && state.currentUser.status === 'active') {
@@ -617,15 +627,18 @@
         const user = userCredential.user;
 
         // 3. Save to Firestore
-        const batch = writeBatch(db);
-        batch.set(doc(db, 'users', user.uid), {
+        await addDoc(collection(db, "users"), {
           name,
           email,
           inviteCode,
           role: "client",
           status: "pending",
           createdAt: Date.now(),
+          uid: user.uid
         });
+        console.log("USER SAVED");
+
+        const batch = writeBatch(db);
         batch.update(inviteDoc.ref, { used: true });
         
         await batch.commit();
@@ -655,7 +668,7 @@
       if (activePane) activePane.style.display = 'block';
 
       if (tabId === 'codes') renderInvites(state.inviteCodes);
-      if (tabId === 'requests') renderRequests();
+      if (tabId === 'requests') renderRequests(state.allUsers || []);
       if (tabId === 'users') renderUsers();
     }
     const switchAdminTab = window.switchAdminTab;
@@ -761,26 +774,36 @@
       await updateDoc(doc(db, 'users', id), { status: 'active' });
     }
 
-    function renderRequests() {
+    function renderRequests(users) {
+      console.log("Rendering requests");
       const container = document.getElementById('requests-list');
-      if (state.requests.length === 0) {
+      container.innerHTML = "";
+      
+      if (!users) return;
+
+      const pendingUsers = users.filter(user => user.status === "pending");
+
+      if (pendingUsers.length === 0) {
         container.innerHTML = '<div style="color: var(--text-muted); text-align: center; padding: 20px;">Нет активных заявок</div>';
         return;
       }
 
-      container.innerHTML = state.requests.map(r => `
-        <div class="list-item">
+      pendingUsers.forEach(user => {
+        const div = document.createElement("div");
+        div.className = "list-item";
+        div.innerHTML = `
           <div class="item-info">
-            <div style="font-weight: 700; margin-bottom: 4px;">${r.name} <span class="badge">${r.email}</span></div>
-            <div style="font-size: 0.875rem; color: var(--text-muted);">Код: <span style="font-family: monospace;">${r.inviteCode}</span></div>
+            <div style="font-weight: 700; margin-bottom: 4px;">${user.name} <span class="badge">${user.email}</span></div>
+            <div style="font-size: 0.875rem; color: var(--text-muted);">Код: <span style="font-family: monospace;">${user.inviteCode}</span></div>
           </div>
           <div class="item-actions">
-            <button class="btn btn-sm btn-outline edit-req-btn" data-id="${r.id}">✏️ Изменить имя</button>
-            <button class="btn btn-sm btn-success approve-req-btn" data-id="${r.id}">✔ Принять</button>
-            <button class="btn btn-sm btn-danger reject-req-btn" data-id="${r.id}">❌ Отклонить</button>
+            <button class="btn btn-sm btn-outline edit-req-btn" data-id="${user.id}">✏️ Изменить имя</button>
+            <button class="btn btn-sm btn-success approve-req-btn" data-id="${user.id}">✔ Принять</button>
+            <button class="btn btn-sm btn-danger reject-req-btn" data-id="${user.id}">❌ Отклонить</button>
           </div>
-        </div>
-      `).join('');
+        `;
+        container.appendChild(div);
+      });
     }
 
     // --- USERS ---
