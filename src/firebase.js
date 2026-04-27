@@ -17,12 +17,11 @@ import config from '../firebase-applet-config.json';
 // };
 
 const firebaseConfig = {
-  ...config,
-  databaseURL: undefined // not needed for firestore usually
+  ...config
 };
 
 export const app = initializeApp(firebaseConfig);
 export const auth = getAuth(app);
-export const db = getFirestore(app, config.firestoreDatabaseId);
+export const db = getFirestore(app);
 
 export { signInWithEmailAndPassword, createUserWithEmailAndPassword, onAuthStateChanged, signOut, collection, doc, setDoc, addDoc, where, getDoc, getDocs, onSnapshot, query, updateDoc, deleteDoc, writeBatch };
