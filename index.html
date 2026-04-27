@@ -588,6 +588,7 @@
       if (email === "admin@admin.com" && password === ADMIN_CODE) {
         state.currentUser = { role: "admin" };
         saveState();
+        setupRealtimeSync();
         initApp();
         return;
       }
