@@ -225,7 +225,7 @@
 
       <!-- Register Form -->
       <div id="register-form-container" style="display: none;">
-        <form id="register-form" onsubmit="window.handleRegister(event)">
+        <form id="register-form">
           <div class="input-group">
             <label>Инвайт код</label>
             <input type="text" id="auth-reg-invite" required placeholder="A7fK29xZ">
@@ -242,7 +242,7 @@
             <label>Пароль</label>
             <input type="password" id="auth-reg-password" required placeholder="******">
           </div>
-          <button type="submit" class="btn btn-success" style="width: 100%;">Зарегистрироваться</button>
+          <button type="button" class="btn btn-success" style="width: 100%;" onclick="window.submitRequest()">Зарегистрироваться</button>
         </form>
       </div>
     </div>
@@ -604,8 +604,8 @@
       }
     };
 
-    window.handleRegister = async (e) => {
-      e.preventDefault();
+    window.submitRequest = async () => {
+      console.log("REGISTER CLICKED");
       const inviteCode = document.getElementById('auth-reg-invite').value.trim();
       const name = document.getElementById('auth-reg-name').value.trim();
       const email = document.getElementById('auth-reg-email').value.trim();
@@ -642,6 +642,7 @@
         batch.update(inviteDoc.ref, { used: true });
         
         await batch.commit();
+        alert("REGISTER WORKS");
         alert("✅ Заявка отправлена успешно! Ожидайте одобрения администратором.");
       } catch (error) {
         console.error(error);
