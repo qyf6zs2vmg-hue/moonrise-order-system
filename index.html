@@ -260,6 +260,7 @@
         <button class="tab-btn active switch-admin-tab-btn" id="tab-btn-codes" data-tab="codes">Codes</button>
         <button class="tab-btn switch-admin-tab-btn" id="tab-btn-requests" data-tab="requests">Requests</button>
         <button class="tab-btn switch-admin-tab-btn" id="tab-btn-users" data-tab="users">Users</button>
+        <button class="tab-btn switch-admin-tab-btn" id="tab-btn-orders" data-tab="orders">Orders</button>
       </div>
 
       <div class="card">
@@ -282,6 +283,12 @@
         <div id="pane-users" class="tab-pane">
           <h2 style="font-size: 1.25rem; margin-bottom: 20px;">Зарегистрированные пользователи</h2>
           <div id="users-list" style="display: flex; flex-direction: column;"></div>
+        </div>
+
+        <!-- Orders Pane -->
+        <div id="pane-orders" class="tab-pane">
+          <h2 style="font-size: 1.25rem; margin-bottom: 20px;">Все заказы</h2>
+          <div id="admin-orders-list" style="display: flex; flex-direction: column;"></div>
         </div>
       </div>
     </div>
@@ -387,6 +394,16 @@
           if (paneReqs && paneReqs.style.display === 'block') renderRequests(users);
           if (paneUsers && paneUsers.style.display === 'block') renderUsers();
         }));
+        unsubscribes.push(onSnapshot(collection(db, 'orders'), snap => {
+          const allOrders = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+          allOrders.forEach(o => {
+            try { o.items = JSON.parse(o.itemsJson || '[]'); } catch(e) { o.items = []; }
+          });
+          state.allOrders = allOrders;
+          state.allOrders.sort((a,b) => b.createdAt - a.createdAt);
+          const paneOrders = document.getElementById('pane-orders');
+          if (paneOrders && paneOrders.style.display === 'block') renderAdminOrders();
+        }));
         initApp();
         return;
       }
@@ -443,8 +460,8 @@
             allOrders.forEach(o => {
               try { o.items = JSON.parse(o.itemsJson || '[]'); } catch(e) { o.items = []; }
             });
-            state.orders_active = allOrders.filter(o => o.status === 'active' && o.userId === state.currentUser.uid);
-            state.orders_archive = allOrders.filter(o => o.status === 'archived' && o.userId === state.currentUser.uid);
+            state.orders_active = allOrders.filter(o => o.status === 'active' && (o.userId === state.currentUser.uid || o.customerEmail === state.currentUser.email));
+            state.orders_archive = allOrders.filter(o => o.status === 'archived' && (o.userId === state.currentUser.uid || o.customerEmail === state.currentUser.email));
             state.orders_active.sort((a,b) => b.createdAt - a.createdAt);
             state.orders_archive.sort((a,b) => b.createdAt - a.createdAt);
             const paneActive = document.getElementById('c-pane-active');
@@ -670,6 +687,7 @@
       if (tabId === 'codes') renderInvites(state.inviteCodes);
       if (tabId === 'requests') renderRequests(state.allUsers || []);
       if (tabId === 'users') renderUsers();
+      if (tabId === 'orders') renderAdminOrders();
     }
     const switchAdminTab = window.switchAdminTab;
 
@@ -818,6 +836,39 @@
       }
     }
 
+    // --- ORDERS ---
+    function renderAdminOrders() {
+      const container = document.getElementById('admin-orders-list');
+      if (!container) return;
+      
+      if (!state.allOrders || state.allOrders.length === 0) {
+        container.innerHTML = '<div style="color: var(--text-muted); text-align: center; padding: 20px;">Нет заказов</div>';
+        return;
+      }
+      
+      container.innerHTML = state.allOrders.map(o => `
+        <div class="list-item" style="display: block; border: 1px solid var(--border); border-radius: 8px; margin-bottom: 12px; padding: 16px;">
+          <div style="display: flex; justify-content: space-between; border-bottom: 1px dashed var(--border); padding-bottom: 12px; margin-bottom: 12px;">
+            <div style="font-weight: 700; font-size: 1.125rem;">Заказ #${o.id.substring(0,6)} <span class="badge ${o.status === 'active' ? 'bg-primary' : 'bg-success'}" style="margin-left: 8px;">${o.status === 'active' ? 'Активен' : 'Получен'}</span></div>
+            <div style="font-weight: 800; color: var(--success);">$${o.total}</div>
+          </div>
+          <div style="margin-bottom: 12px; font-size: 0.9375rem;">
+            <strong>Клиент:</strong> ${o.customerName} <br>
+            <strong>Email:</strong> ${o.customerEmail} <br>
+            <strong>Инвайт:</strong> ${o.customerInvite}
+          </div>
+          <div style="margin-bottom: 0px; font-size: 0.875rem; background: #f8fafc; padding: 12px; border-radius: 8px;">
+            ${o.items.map(item => `
+              <div style="display: flex; justify-content: space-between; margin-bottom: 4px;">
+                <span>${item.name} x${item.quantity}</span>
+                <span style="font-weight: 600;">$${item.price * item.quantity}</span>
+              </div>
+            `).join('')}
+          </div>
+        </div>
+      `).join('');
+    }
+
     function renderUsers() {
       const container = document.getElementById('users-list');
       if (state.users.length === 0) {
@@ -945,6 +996,7 @@
       
       const total = state.cart.reduce((sum, item) => sum + (item.price * item.quantity), 0);
       const orderData = {
+        userId: state.currentUser.uid,
         customerName: state.currentUser.name,
         customerEmail: state.currentUser.email,
         customerInvite: state.currentUser.inviteCode,
@@ -972,7 +1024,7 @@
       // Filter logic deleted since arrays are already scoped to the inviteCode in setupRealtimeSync
       const filtered = sourceArray;
 
-      if (filtered.length === 0) {
+      if (!filtered || filtered.length === 0) {
         container.innerHTML = '<div style="color: var(--text-muted); text-align: center; padding: 20px;">Нет заказов</div>';
         return;
       }
